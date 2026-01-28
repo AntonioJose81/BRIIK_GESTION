@@ -122,16 +122,24 @@ export const supabaseService = {
             requires_re: store.requiresRE
         };
 
-        if (store.id.length > 30) { // Check if it's a UUID or a short generated ID
+        // Try to update first, if nothing updated, then insert
+        const { data: existing } = await supabase
+            .from('stores')
+            .select('id')
+            .eq('id', store.id)
+            .single();
+
+        if (existing) {
             const { error } = await supabase
                 .from('stores')
                 .update(payload)
                 .eq('id', store.id);
             if (error) throw error;
+            return store.id;
         } else {
             const { data, error } = await supabase
                 .from('stores')
-                .insert([payload])
+                .insert([{ ...payload, id: store.id }])
                 .select()
                 .single();
             if (error) throw error;
@@ -162,9 +170,15 @@ export const supabaseService = {
             shipping_override: order.shippingOverride
         };
 
+        const { data: existing } = await supabase
+            .from('orders')
+            .select('id')
+            .eq('id', order.id)
+            .single();
+
         let orderId = order.id;
 
-        if (order.id.length > 30) {
+        if (existing) {
             const { error } = await supabase
                 .from('orders')
                 .update(orderPayload)
@@ -173,7 +187,7 @@ export const supabaseService = {
         } else {
             const { data, error } = await supabase
                 .from('orders')
-                .insert([orderPayload])
+                .insert([{ ...orderPayload, id: order.id }])
                 .select()
                 .single();
             if (error) throw error;
