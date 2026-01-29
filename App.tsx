@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Store, Order, AppSettings, AppData } from './types';
+import { Store, Order, AppSettings, AppData, Deposit, SupplierInvoice, RawStock, ProductStock } from './types';
 import { storageService } from './services/storageService';
 import { xmlService } from './services/xmlService';
 import { DEFAULT_SETTINGS } from './constants';
@@ -7,6 +7,7 @@ import { generateId } from './utils';
 import SettingsView from './components/SettingsView';
 import OrderEditor from './components/OrderEditor';
 import DashboardView from './components/DashboardView';
+import InventoryView from './components/InventoryView';
 import { supabase } from './services/supabaseClient';
 import { supabaseService } from './services/supabaseService';
 import { User } from '@supabase/supabase-js';
@@ -20,7 +21,13 @@ const App: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<Order | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  const [deposits, setDeposits] = useState<Deposit[]>([]);
+  const [supplierInvoices, setSupplierInvoices] = useState<SupplierInvoice[]>([]);
+  const [rawStock, setRawStock] = useState<RawStock[]>([]);
+  const [productStock, setProductStock] = useState<ProductStock[]>([]);
 
   // Store Modal State
   const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
@@ -53,6 +60,10 @@ const App: React.FC = () => {
         if (data) {
           setStores(data.stores || []);
           setOrders(data.orders || []);
+          setDeposits(data.deposits || []);
+          setSupplierInvoices(data.supplierInvoices || []);
+          setRawStock(data.rawStock || []);
+          setProductStock(data.productStock || []);
           if (data.settings) setSettings(data.settings);
         }
         setLoading(false);
@@ -63,6 +74,10 @@ const App: React.FC = () => {
       setStores(data.stores || []);
       setOrders(data.orders || []);
       setSettings(data.settings || DEFAULT_SETTINGS);
+      setDeposits([]);
+      setSupplierInvoices([]);
+      setRawStock([]);
+      setProductStock([]);
       setLoading(false);
     }
   }, [user]);
@@ -99,7 +114,7 @@ const App: React.FC = () => {
     [orders, selectedStoreId]);
 
   const handleExportAll = () => {
-    const xmlContent = xmlService.exportToXML({ stores, orders, settings });
+    const xmlContent = xmlService.exportToXML({ stores, orders, settings, deposits, supplierInvoices, rawStock, productStock });
     const blob = new Blob([xmlContent], { type: 'text/xml' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -130,6 +145,8 @@ const App: React.FC = () => {
     setStoreToEdit(store);
     setIsStoreModalOpen(true);
     setIsSettingsOpen(false);
+    setIsDashboardOpen(false);
+    setIsInventoryOpen(false);
     setEditingOrder(null);
   };
 
@@ -218,6 +235,8 @@ const App: React.FC = () => {
     setEditingOrder(newOrder);
     setIsSettingsOpen(false);
     setIsStoreModalOpen(false);
+    setIsDashboardOpen(false);
+    setIsInventoryOpen(false);
   };
 
   const handleSaveOrder = async (savedOrder: Order) => {
@@ -306,20 +325,32 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <button
-            onClick={() => { setIsSettingsOpen(!isSettingsOpen); setEditingOrder(null); setIsStoreModalOpen(false); }}
-            className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isSettingsOpen ? 'bg-primary text-white shadow-lg' : 'hover:bg-purple-50 text-gray-600'}`}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
-            <span className="hidden sm:inline">Ajustes</span>
-          </button>
+          <div className="flex gap-2">
+            <button onClick={() => { setIsSettingsOpen(!isSettingsOpen); setEditingOrder(null); setIsInventoryOpen(false); setIsDashboardOpen(false); setIsStoreModalOpen(false); }} className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isSettingsOpen ? 'bg-primary text-white shadow-lg' : 'hover:bg-purple-50 text-gray-600'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" /><circle cx="12" cy="12" r="3" /></svg>
+            </button>
+            <button onClick={() => { setIsDashboardOpen(!isDashboardOpen); setIsSettingsOpen(false); setIsInventoryOpen(false); setEditingOrder(null); setIsStoreModalOpen(false); }} className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isDashboardOpen ? 'bg-primary text-white shadow-lg' : 'hover:bg-purple-50 text-gray-600'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
+            </button>
+            <button onClick={() => { setIsInventoryOpen(!isInventoryOpen); setIsSettingsOpen(false); setIsDashboardOpen(false); setEditingOrder(null); setIsStoreModalOpen(false); }} className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isInventoryOpen ? 'bg-primary text-white shadow-lg' : 'hover:bg-purple-50 text-gray-600'}`}>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></svg>
+            </button>
+          </div>
 
           <button
-            onClick={() => { setIsDashboardOpen(!isDashboardOpen); setIsSettingsOpen(false); setEditingOrder(null); setIsStoreModalOpen(false); }}
+            onClick={() => { setIsDashboardOpen(!isDashboardOpen); setIsSettingsOpen(false); setIsInventoryOpen(false); setEditingOrder(null); setIsStoreModalOpen(false); }}
             className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isDashboardOpen ? 'bg-primary text-white shadow-lg' : 'hover:bg-purple-50 text-gray-600'}`}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="m19 9-5 5-4-4-3 3" /></svg>
             <span className="hidden sm:inline">Analítica</span>
+          </button>
+
+          <button
+            onClick={() => { setIsInventoryOpen(!isInventoryOpen); setIsSettingsOpen(false); setIsDashboardOpen(false); setEditingOrder(null); setIsStoreModalOpen(false); }}
+            className={`p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold ${isInventoryOpen ? 'bg-primary text-white shadow-lg' : 'hover:bg-purple-50 text-gray-600'}`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5" /><path d="M12 22V12" /></svg>
+            <span className="hidden sm:inline">Almacén</span>
           </button>
 
           <div className="w-px h-6 bg-purple-100 mx-1"></div>
@@ -473,7 +504,7 @@ const App: React.FC = () => {
           {isSettingsOpen ? (
             <SettingsView
               settings={settings}
-              onSave={(newSettings) => { setSettings(newSettings); setIsSettingsOpen(false); }}
+              onSave={(newSettings) => { handleUpdateSettings(newSettings); setIsSettingsOpen(false); }}
               onClose={() => setIsSettingsOpen(false)}
             />
           ) : isDashboardOpen ? (
@@ -482,6 +513,23 @@ const App: React.FC = () => {
               stores={stores}
               settings={settings}
               onClose={() => setIsDashboardOpen(false)}
+            />
+          ) : isInventoryOpen ? (
+            <InventoryView
+              stores={stores}
+              settings={settings}
+              deposits={deposits}
+              supplierInvoices={supplierInvoices}
+              rawStock={rawStock}
+              productStock={productStock}
+              onSaveDeposit={async (d) => { if (user) { const id = await supabaseService.saveDeposit(d); d.id = id; setDeposits(prev => prev.find(x => x.id === d.id) ? prev.map(x => x.id === d.id ? d : x) : [...prev, d]); } }}
+              onDeleteDeposit={async (id) => { if (user) { await supabaseService.deleteDeposit(id); setDeposits(deposits.filter(x => x.id !== id)); } }}
+              onSaveInvoice={async (i) => { if (user) { const id = await supabaseService.saveSupplierInvoice(i); i.id = id; setSupplierInvoices(prev => prev.find(x => x.id === i.id) ? prev.map(x => x.id === i.id ? i : x) : [...prev, i]); } }}
+              onDeleteInvoice={async (id) => { if (user) { await supabaseService.deleteSupplierInvoice(id); setSupplierInvoices(supplierInvoices.filter(x => x.id !== id)); } }}
+              onSaveRawStock={async (s) => { if (user) { const id = await supabaseService.saveRawStock(s); s.id = id; setRawStock(prev => prev.find(x => x.id === s.id) ? prev.map(x => x.id === s.id ? s : x) : [...prev, s]); } }}
+              onDeleteRawStock={async (id) => { if (user) { await supabaseService.deleteRawStock(id); setRawStock(rawStock.filter(x => x.id !== id)); } }}
+              onSaveProductStock={async (s) => { if (user) { await supabaseService.saveProductStock(s); setProductStock(prev => prev.find(x => x.modelCode === s.modelCode && x.colorCode === s.colorCode) ? prev.map(x => x.modelCode === s.modelCode && x.colorCode === s.colorCode ? s : x) : [...prev, s]); } }}
+              onClose={() => setIsInventoryOpen(false)}
             />
           ) : editingOrder ? (
             <OrderEditor

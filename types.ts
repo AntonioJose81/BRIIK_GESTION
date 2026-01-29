@@ -100,6 +100,39 @@ export interface LineType {
   equivalenceUnits: number;
 }
 
+export interface Deposit {
+  id: string;
+  storeId: string;
+  productName: string;
+  qty: number;
+  date: string;
+  notes?: string;
+}
+
+export interface SupplierInvoice {
+  id: string;
+  supplierName: string;
+  invoiceNumber: string;
+  date: string;
+  amount: number;
+  notes?: string;
+}
+
+export interface RawStock {
+  id: string;
+  itemName: string;
+  qty: number;
+  unit: string;
+  supplierName?: string;
+}
+
+export interface ProductStock {
+  id: string;
+  modelCode: string;
+  colorCode: string;
+  qty: number;
+}
+
 export interface AppSettings {
   rules: Rules;
   billing: BillingInfo;
@@ -114,4 +147,8 @@ export interface AppData {
   settings: AppSettings;
   stores: Store[];
   orders: Order[];
+  deposits: Deposit[];
+  supplierInvoices: SupplierInvoice[];
+  rawStock: RawStock[];
+  productStock: ProductStock[];
 }

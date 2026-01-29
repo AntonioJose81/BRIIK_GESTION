@@ -8,10 +8,14 @@ export const supabaseService = {
     },
 
     async signInWithEmail(email: string) {
+        // En producción (Vercel), window.location.origin debería ser la URL correcta.
+        // Si tienes problemas, puedes forzar una URL en .env con VITE_REDIRECT_URL
+        const redirectTo = import.meta.env.VITE_REDIRECT_URL || window.location.origin;
+
         const { data, error } = await supabase.auth.signInWithOtp({
             email,
             options: {
-                emailRedirectTo: window.location.origin,
+                emailRedirectTo: redirectTo,
             },
         });
         if (error) throw error;
@@ -47,6 +51,33 @@ export const supabaseService = {
             .select('*, order_lines(*)')
             .eq('user_id', user.id)
             .order('created_at', { ascending: false });
+
+        // Load Deposits
+        const { data: depositsData } = await supabase
+            .from('deposits')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('date', { ascending: false });
+
+        // Load Supplier Invoices
+        const { data: invoicesData } = await supabase
+            .from('supplier_invoices')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('date', { ascending: false });
+
+        // Load Raw Stock
+        const { data: rawStockData } = await supabase
+            .from('raw_stock')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('item_name');
+
+        // Load Manufactured Stock
+        const { data: manufacturedStockData } = await supabase
+            .from('manufactured_stock')
+            .select('*')
+            .eq('user_id', user.id);
 
         return {
             settings: settingsData ? {
@@ -97,6 +128,35 @@ export const supabaseService = {
                     pvdUnit: Number(l.pvd_unit),
                     pvpUnit: Number(l.pvp_unit)
                 }))
+            })),
+            deposits: (depositsData || []).map(d => ({
+                id: d.id,
+                storeId: d.store_id,
+                productName: d.product_name,
+                qty: d.qty,
+                date: d.date,
+                notes: d.notes
+            })),
+            supplierInvoices: (invoicesData || []).map(i => ({
+                id: i.id,
+                supplierName: i.supplier_name,
+                invoiceNumber: i.invoice_number,
+                date: i.date,
+                amount: Number(i.amount),
+                notes: i.notes
+            })),
+            rawStock: (rawStockData || []).map(rs => ({
+                id: rs.id,
+                itemName: rs.item_name,
+                qty: Number(rs.qty),
+                unit: rs.unit,
+                supplierName: rs.supplier_name
+            })),
+            productStock: (manufacturedStockData || []).map(ms => ({
+                id: ms.id,
+                modelCode: ms.model_code,
+                colorCode: ms.color_code,
+                qty: ms.qty
             }))
         };
     },
@@ -241,6 +301,112 @@ export const supabaseService = {
             .from('app_settings')
             .upsert(payload, { onConflict: 'user_id' });
 
+        if (error) throw error;
+    },
+
+    async saveDeposit(deposit: import('../types').Deposit) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const payload = {
+            user_id: user.id,
+            store_id: deposit.storeId,
+            product_name: deposit.productName,
+            qty: deposit.qty,
+            date: deposit.date,
+            notes: deposit.notes
+        };
+
+        if (deposit.id.length > 20) { // UUID
+            const { error } = await supabase.from('deposits').update(payload).eq('id', deposit.id);
+            if (error) throw error;
+            return deposit.id;
+        } else {
+            const { data, error } = await supabase.from('deposits').insert([payload]).select().single();
+            if (error) throw error;
+            return data.id;
+        }
+    },
+
+    async deleteDeposit(id: string) {
+        const { error } = await supabase.from('deposits').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async saveSupplierInvoice(invoice: import('../types').SupplierInvoice) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const payload = {
+            user_id: user.id,
+            supplier_name: invoice.supplierName,
+            invoice_number: invoice.invoiceNumber,
+            date: invoice.date,
+            amount: invoice.amount,
+            notes: invoice.notes
+        };
+
+        if (invoice.id.length > 20) {
+            const { error } = await supabase.from('supplier_invoices').update(payload).eq('id', invoice.id);
+            if (error) throw error;
+            return invoice.id;
+        } else {
+            const { data, error } = await supabase.from('supplier_invoices').insert([payload]).select().single();
+            if (error) throw error;
+            return data.id;
+        }
+    },
+
+    async deleteSupplierInvoice(id: string) {
+        const { error } = await supabase.from('supplier_invoices').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async saveRawStock(stock: import('../types').RawStock) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const payload = {
+            user_id: user.id,
+            item_name: stock.itemName,
+            qty: stock.qty,
+            unit: stock.unit,
+            supplier_name: stock.supplierName
+        };
+
+        if (stock.id.length > 20) {
+            const { error } = await supabase.from('raw_stock').update(payload).eq('id', stock.id);
+            if (error) throw error;
+            return stock.id;
+        } else {
+            const { data, error } = await supabase.from('raw_stock').insert([payload]).select().single();
+            if (error) throw error;
+            return data.id;
+        }
+    },
+
+    async deleteRawStock(id: string) {
+        const { error } = await supabase.from('raw_stock').delete().eq('id', id);
+        if (error) throw error;
+    },
+
+    async saveProductStock(stock: import('../types').ProductStock) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const payload = {
+            user_id: user.id,
+            model_code: stock.modelCode,
+            color_code: stock.colorCode,
+            qty: stock.qty
+        };
+
+        const { error } = await supabase.from('manufactured_stock').upsert(payload, { onConflict: 'user_id,model_code,color_code' });
+        if (error) throw error;
+    },
+
+    async deleteProductStock(id: string) {
+        const { error } = await supabase.from('manufactured_stock').delete().eq('id', id);
         if (error) throw error;
     }
 };

@@ -1,10 +1,10 @@
 
-import { AppData, AppSettings, Store, Order, OrderLine, LineType, Rules, Status, Model, Color } from '../types';
+import { AppData, AppSettings, Store, Order, OrderLine, LineType, Rules, Status, Model, Color, Deposit, SupplierInvoice, RawStock, ProductStock } from '../types';
 import { generateId } from '../utils';
 
 export const xmlService = {
   exportToXML: (data: AppData): string => {
-    const { settings, stores, orders } = data;
+    const { settings, stores, orders, deposits, supplierInvoices, rawStock, productStock } = data;
 
     const xmlLines = [
       `<?xml version="1.0" encoding="UTF-8"?>`,
@@ -62,7 +62,7 @@ export const xmlService = {
       `    </LineTypes>`,
       `  </Settings>`,
       `  <Stores>`,
-      ...stores.map(s => `
+      ...(stores || []).map(s => `
     <Store id="${s.id}">
       <Name>${s.name || ''}</Name>
       <City>${s.city || ''}</City>
@@ -79,7 +79,7 @@ export const xmlService = {
     </Store>`),
       `  </Stores>`,
       `  <Orders>`,
-      ...orders.map(o => `
+      ...(orders || []).map(o => `
     <Order id="${o.id}" storeId="${o.storeId}" number="${o.number}">
       <InvoiceNumber>${o.invoiceNumber || ''}</InvoiceNumber>
       <Date>${o.date}</Date>
@@ -106,6 +106,42 @@ export const xmlService = {
       </Lines>
     </Order>`),
       `  </Orders>`,
+      `  <Deposits>`,
+      ...(deposits || []).map(d => `
+    <Deposit id="${d.id}" storeId="${d.storeId}">
+      <ProductName>${d.productName}</ProductName>
+      <Qty>${d.qty}</Qty>
+      <Date>${d.date}</Date>
+      <Notes>${d.notes || ''}</Notes>
+    </Deposit>`),
+      `  </Deposits>`,
+      `  <SupplierInvoices>`,
+      ...(supplierInvoices || []).map(i => `
+    <SupplierInvoice id="${i.id}">
+      <SupplierName>${i.supplierName}</SupplierName>
+      <InvoiceNumber>${i.invoiceNumber || ''}</InvoiceNumber>
+      <Date>${i.date}</Date>
+      <Amount>${i.amount.toFixed(2)}</Amount>
+      <Notes>${i.notes || ''}</Notes>
+    </SupplierInvoice>`),
+      `  </SupplierInvoices>`,
+      `  <RawStock>`,
+      ...(rawStock || []).map(rs => `
+    <RawStockItem id="${rs.id}">
+      <ItemName>${rs.itemName}</ItemName>
+      <Qty>${rs.qty}</Qty>
+      <Unit>${rs.unit}</Unit>
+      <SupplierName>${rs.supplierName || ''}</SupplierName>
+    </RawStockItem>`),
+      `  </RawStock>`,
+      `  <ProductStock>`,
+      ...(productStock || []).map(ps => `
+    <ProductStockItem id="${ps.id}">
+      <ModelCode>${ps.modelCode}</ModelCode>
+      <ColorCode>${ps.colorCode}</ColorCode>
+      <Qty>${ps.qty}</Qty>
+    </ProductStockItem>`),
+      `  </ProductStock>`,
       `</BRIIKData>`
     ].join('\n');
 
@@ -127,6 +163,7 @@ export const xmlService = {
       let settings: AppSettings | null = null;
       const settingsEl = xmlDoc.getElementsByTagName("Settings")[0];
       if (settingsEl) {
+        // ... (rest of settings parsing)
         const rulesEl = settingsEl.getElementsByTagName("Rules")[0];
         const billingEl = settingsEl.getElementsByTagName("Billing")[0];
 
@@ -241,10 +278,48 @@ export const xmlService = {
         };
       });
 
+      // Parse New Sections (Optional if old XML)
+      const deposits: Deposit[] = Array.from(xmlDoc.getElementsByTagName("Deposit")).map(d => ({
+        id: d.getAttribute("id") || generateId(),
+        storeId: d.getAttribute("storeId") || "",
+        productName: getVal(d, "ProductName"),
+        qty: parseInt(getVal(d, "Qty") || "0"),
+        date: getVal(d, "Date"),
+        notes: getVal(d, "Notes")
+      }));
+
+      const supplierInvoices: SupplierInvoice[] = Array.from(xmlDoc.getElementsByTagName("SupplierInvoice")).map(i => ({
+        id: i.getAttribute("id") || generateId(),
+        supplierName: getVal(i, "SupplierName"),
+        invoiceNumber: getVal(i, "InvoiceNumber"),
+        date: getVal(i, "Date"),
+        amount: parseFloat(getVal(i, "Amount") || "0"),
+        notes: getVal(i, "Notes")
+      }));
+
+      const rawStock: RawStock[] = Array.from(xmlDoc.getElementsByTagName("RawStockItem")).map(rs => ({
+        id: rs.getAttribute("id") || generateId(),
+        itemName: getVal(rs, "ItemName"),
+        qty: parseFloat(getVal(rs, "Qty") || "0"),
+        unit: getVal(rs, "Unit"),
+        supplierName: getVal(rs, "SupplierName")
+      }));
+
+      const productStock: ProductStock[] = Array.from(xmlDoc.getElementsByTagName("ProductStockItem")).map(ps => ({
+        id: ps.getAttribute("id") || generateId(),
+        modelCode: getVal(ps, "ModelCode"),
+        colorCode: getVal(ps, "ColorCode"),
+        qty: parseInt(getVal(ps, "Qty") || "0")
+      }));
+
       return {
-        settings: settings || (null as any), // If null, App will use defaults
+        settings: settings || (null as any),
         stores,
-        orders
+        orders,
+        deposits,
+        supplierInvoices,
+        rawStock,
+        productStock
       };
     } catch (err) {
       console.error("Error importing XML:", err);
